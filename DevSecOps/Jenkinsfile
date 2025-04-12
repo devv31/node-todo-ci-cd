@@ -1,21 +1,19 @@
-
-pipeline {
-    
+pipeline{
     agent any
     environment{
-        SONAR_HOME = tool "Sonar"
+        SONAR_HOME = tool "sonar"
     }
-    stages {
-        
-        stage("Code"){
+    
+    stages{
+        stage("Code Clone"){
             steps{
-                git url: "https://github.com/LondheShubham153/node-todo-cicd.git" , branch: "master"
-                echo "Code Cloned Successfully"
+                echo "Code Clone Stage"
+                git url: "https://github.com/devv31/node-todo-cicd.git", branch: "master"
             }
         }
         stage("SonarQube Analysis"){
             steps{
-               withSonarQubeEnv("Sonar"){
+               withSonarQubeEnv("sonar"){
                    sh "$SONAR_HOME/bin/sonar-scanner -Dsonar.projectName=nodetodo -Dsonar.projectKey=nodetodo -X"
                }
             }
@@ -27,37 +25,37 @@ pipeline {
                }
             }
         }
-        stage("OWASP"){
+        stage("Code Build & Test"){
             steps{
-                dependencyCheck additionalArguments: '--scan ./', odcInstallation: 'OWASP'
-                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-            }
-        }
-        stage("Build & Test"){
-            steps{
-                sh 'docker build -t node-app-batch-6:latest .'
-                echo "Code Built Successfully"
+                echo "Code Build Stage"
+                sh "docker build -t node-app:latest ."
             }
         }
         stage("Trivy"){
             steps{
-                sh "trivy image node-app-batch-6"
+                sh "trivy image node-app"
             }
         }
-        stage("Push to Private Docker Hub Repo"){
-            steps{
-                withCredentials([usernamePassword(credentialsId:"DockerHubCreds",passwordVariable:"dockerPass",usernameVariable:"dockerUser")]){
-                sh "docker login -u ${env.dockerUser} -p ${env.dockerPass}"
-                sh "docker tag node-app-batch-6:latest ${env.dockerUser}/node-app-batch-6:latest"
-                sh "docker push ${env.dockerUser}/node-app-batch-6:latest"
-                }
+        stage("Push to Public Docker Hub Repo") {
+    steps {
+        withCredentials([usernamePassword(credentialsId: "DockerHubCreds", passwordVariable: "dockerPass", usernameVariable: "dockerUser")]) {
+            script {
+                // Log in to Docker Hub using the credentials injected by Jenkins
+                sh "docker login -u ${dockerUser} -p ${dockerPass}"
+
+                // Tag the Docker image
+                sh "docker tag node-app:latest ${dockerUser}/node-app:latest"
                 
+                // Push the Docker image to the public Docker Hub repository
+                sh "docker push ${dockerUser}/node-app:latest"
             }
         }
+    }
+}
+
         stage("Deploy"){
             steps{
-                sh "docker-compose down && docker-compose up -d"
-                echo "App Deployed Successfully"
+                sh "docker compose down && docker compose up -d"
             }
         }
     }
